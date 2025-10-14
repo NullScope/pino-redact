@@ -13,9 +13,9 @@ npm install @pinojs/redact
 ## Usage
 
 ```js
-const slowRedact = require('@pinojs/redact')
+const pinoRedact = require('@pinojs/redact')
 
-const redact = slowRedact({
+const redact = pinoRedact({
   paths: ['headers.cookie', 'headers.authorization', 'user.password']
 })
 
@@ -40,7 +40,7 @@ console.log(obj.headers.cookie) // 'secret-session-token'
 
 ## API
 
-### slowRedact(options) → Function
+### pinoRedact(options) → Function
 
 Creates a redaction function with the specified options.
 
@@ -68,7 +68,7 @@ Supports the same path syntax as fast-redact:
 
 **Custom censor value:**
 ```js
-const redact = slowRedact({
+const redact = pinoRedact({
   paths: ['password'],
   censor: '***HIDDEN***'
 })
@@ -76,7 +76,7 @@ const redact = slowRedact({
 
 **Dynamic censor function:**
 ```js
-const redact = slowRedact({
+const redact = pinoRedact({
   paths: ['password'],
   censor: (value, path) => `REDACTED:${path}`
 })
@@ -84,7 +84,7 @@ const redact = slowRedact({
 
 **Return object instead of JSON string:**
 ```js
-const redact = slowRedact({
+const redact = pinoRedact({
   paths: ['secret'],
   serialize: false
 })
@@ -100,7 +100,7 @@ console.log(restored.secret) // 'hidden'
 
 **Custom serialization:**
 ```js
-const redact = slowRedact({
+const redact = pinoRedact({
   paths: ['password'],
   serialize: obj => JSON.stringify(obj, null, 2)
 })
@@ -108,7 +108,7 @@ const redact = slowRedact({
 
 **Remove keys instead of redacting:**
 ```js
-const redact = slowRedact({
+const redact = pinoRedact({
   paths: ['password', 'user.secret'],
   remove: true
 })
@@ -122,16 +122,16 @@ console.log(redact(obj))
 **Wildcard patterns:**
 ```js
 // Redact all properties in secrets object
-const redact1 = slowRedact({ paths: ['secrets.*'] })
+const redact1 = pinoRedact({ paths: ['secrets.*'] })
 
 // Redact password for any user
-const redact2 = slowRedact({ paths: ['users.*.password'] })
+const redact2 = pinoRedact({ paths: ['users.*.password'] })
 
 // Redact all items in an array
-const redact3 = slowRedact({ paths: ['items.*'] })
+const redact3 = pinoRedact({ paths: ['items.*'] })
 
 // Remove all secrets instead of redacting them
-const redact4 = slowRedact({ paths: ['secrets.*'], remove: true })
+const redact4 = pinoRedact({ paths: ['secrets.*'], remove: true })
 ```
 
 ## Key Differences from fast-redact
@@ -268,7 +268,7 @@ const largeConfig = {
   secrets: { password: 'hidden', apiKey: 'secret' }
 }
 
-const redact = slowRedact({ paths: ['secrets.password'] })
+const redact = pinoRedact({ paths: ['secrets.password'] })
 const result = redact(largeConfig)
 
 // Only secrets object is cloned, database and api share original references
@@ -284,7 +284,7 @@ This approach provides **immutability where it matters** while **sharing referen
 The `remove: true` option provides full compatibility with fast-redact's key removal functionality:
 
 ```js
-const redact = slowRedact({
+const redact = pinoRedact({
   paths: ['password', 'secrets.*', 'users.*.credentials'],
   remove: true
 })
