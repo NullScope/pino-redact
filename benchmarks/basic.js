@@ -1,3 +1,5 @@
+'use strict'
+
 const { bench, group, run } = require('mitata')
 const slowRedact = require('../index.js')
 const fastRedact = require('fast-redact')
