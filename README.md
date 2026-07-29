@@ -60,9 +60,10 @@ Supports the same path syntax as fast-redact:
 - **Bracket notation**: `'user["password"]'`, `'headers["X-Forwarded-For"]'`
 - **Array indices**: `'users[0].password'`, `'items[1].secret'`
 - **Wildcards**:
-  - Terminal: `'users.*.password'` (redacts password for all users)
-  - Intermediate: `'*.password'` (redacts password at any level)
+  - Terminal: `'users.*.password'` (redacts `password` for all users)
+  - Intermediate: `'*.password'` (redacts `password` one level deep)
   - Array wildcard: `'items.*'` (redacts all array elements)
+  - **Deep wildcard**: `'**.password'` (redacts `password` at _every_ depth in the object)
 
 #### Examples
 
@@ -132,6 +133,22 @@ const redact3 = pinoRedact({ paths: ['items.*'] })
 
 // Remove all secrets instead of redacting them
 const redact4 = pinoRedact({ paths: ['secrets.*'], remove: true })
+
+// Deep wildcard: redact 'password' no matter how deeply nested
+const redact5 = pinoRedact({ paths: ['**.password'] })
+redact5({ password: 'top', user: { password: 'mid', profile: { password: 'deep' } } })
+// {"password":"[REDACTED]","user":{"password":"[REDACTED]","profile":{"password":"[REDACTED]"}}}
+
+// Scope the deep wildcard to a subtree
+const redact6 = pinoRedact({ paths: ['request.**.token'] })
+redact6({ request: { token: 'top', headers: { token: 'nested' } }, other: { token: 'untouched' } })
+// {"request":{"token":"[REDACTED]","headers":{"token":"[REDACTED]"}},"other":{"token":"untouched"}}
+
+// ** with a literal key then *: find 'credentials' at any depth, redact 'password' on each of its children
+const redact7 = pinoRedact({ paths: ['**.credentials.*.password'] })
+redact7({ credentials: { admin: { password: 'password' }, user: { password: 'password' } }, service: { credentials: { api: { password: 'password' } } } })
+// {"credentials":{"admin":{"password":"[REDACTED]"},"user":{"password":"[REDACTED]"}},"service":{"credentials":{"api":{"password":"[REDACTED]"}}}}
+
 ```
 
 ## Key Differences from fast-redact
@@ -174,12 +191,12 @@ const redact4 = pinoRedact({ paths: ['secrets.*'], remove: true })
 
 ### Performance Results
 
-| Operation Type | @pinojs/redact | fast-redact | Performance Ratio |
-|---------------|-------------|-------------|-------------------|
-| **Small objects** | ~690ns | ~200ns | ~3.5x slower |
-| **Large objects (minimal redaction)** | **~18μs** | ~17μs | **~same performance** |
-| **Large objects (wildcards)** | **~48μs** | ~37μs | **~1.3x slower** |
-| **No redaction (large objects)** | **~18μs** | ~17μs | **~same performance** |
+| Operation Type                        | @pinojs/redact | fast-redact | Performance Ratio     |
+| ------------------------------------- | -------------- | ----------- | --------------------- |
+| **Small objects**                     | ~690ns         | ~200ns      | ~3.5x slower          |
+| **Large objects (minimal redaction)** | **~18μs**      | ~17μs       | **~same performance** |
+| **Large objects (wildcards)**         | **~48μs**      | ~37μs       | **~1.3x slower**      |
+| **No redaction (large objects)**      | **~18μs**      | ~17μs       | **~same performance** |
 
 ### Performance Improvements
 
@@ -305,10 +322,10 @@ console.log(redact(data))
 
 ### Remove vs Redact Behavior
 
-| Option | Behavior | Output Example |
-|--------|----------|----------------|
+| Option           | Behavior                    | Output Example              |
+| ---------------- | --------------------------- | --------------------------- |
 | Default (redact) | Replaces values with censor | `{"password":"[REDACTED]"}` |
-| `remove: true` | Completely omits keys | `{}` |
+| `remove: true`   | Completely omits keys       | `{}`                        |
 
 ### Compatibility Notes
 

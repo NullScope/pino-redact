@@ -200,7 +200,7 @@ function redactPaths (obj, paths, censor, remove = false) {
   for (const path of paths) {
     const parts = parsePath(path)
 
-    if (parts.includes('*')) {
+    if (parts.includes('**') || parts.includes('*')) {
       redactWildcardPath(obj, parts, censor, path, remove)
     } else {
       if (remove) {
@@ -222,6 +222,12 @@ function redactPaths (obj, paths, censor, remove = false) {
 }
 
 function redactWildcardPath (obj, parts, censor, originalPath, remove = false) {
+  const doubleWildcardIndex = parts.indexOf('**')
+  if (doubleWildcardIndex !== -1) {
+    redactDoubleWildcardPath(obj, parts, censor, doubleWildcardIndex, originalPath, remove)
+    return
+  }
+
   const wildcardIndex = parts.indexOf('*')
 
   if (wildcardIndex === parts.length - 1) {
@@ -346,6 +352,85 @@ function redactIntermediateWildcard (obj, parts, censor, wildcardIndex, original
   }
 }
 
+function redactDoubleWildcardPath (obj, parts, censor, doubleWildcardIndex, originalPath, remove) {
+  const beforeDoubleWildcard = parts.slice(0, doubleWildcardIndex)
+  const afterDoubleWildcard = parts.slice(doubleWildcardIndex + 1)
+
+  // Navigate to the node where ** begins
+  let startNode = obj
+  const startPath = [...beforeDoubleWildcard]
+  for (const part of beforeDoubleWildcard) {
+    if (startNode === null || typeof startNode !== 'object') return
+    if (!(part in startNode)) return
+    startNode = startNode[part]
+  }
+
+  if (startNode === null || typeof startNode !== 'object') return
+
+  function traverseAll (current, currentPath) {
+    if (current === null || typeof current !== 'object') return
+
+    if (afterDoubleWildcard.length === 0) {
+      // ** at end: redact all own keys at the current level
+      if (remove) {
+        const keysToDelete = []
+        for (const key in current) {
+          if (Object.prototype.hasOwnProperty.call(current, key)) keysToDelete.push(key)
+        }
+        for (const key of keysToDelete) delete current[key]
+      } else {
+        for (const key in current) {
+          if (Object.prototype.hasOwnProperty.call(current, key)) {
+            const fullPath = [...currentPath, key]
+            const actualCensor = typeof censor === 'function' ? censor(current[key], fullPath) : censor
+            current[key] = actualCensor
+          }
+        }
+      }
+    } else if (afterDoubleWildcard.includes('**')) {
+      // Another ** further along — delegate recursively
+      const nextDoubleWildcardIndex = afterDoubleWildcard.indexOf('**')
+      const wrappedCensor = typeof censor === 'function'
+        ? (value, path) => censor(value, [...currentPath, ...path])
+        : censor
+      redactDoubleWildcardPath(current, afterDoubleWildcard, wrappedCensor, nextDoubleWildcardIndex, originalPath, remove)
+    } else if (afterDoubleWildcard.includes('*')) {
+      // Single wildcard after ** — delegate to existing wildcard logic
+      const wrappedCensor = typeof censor === 'function'
+        ? (value, path) => censor(value, [...currentPath, ...path])
+        : censor
+      redactWildcardPath(current, afterDoubleWildcard, wrappedCensor, originalPath, remove)
+    } else {
+      // Plain path after ** — try to redact at the current level
+      const value = getValueIfExists(current, afterDoubleWildcard)
+      if (value !== PATH_NOT_FOUND) {
+        if (remove) {
+          removeKey(current, afterDoubleWildcard)
+        } else {
+          const fullPath = [...currentPath, ...afterDoubleWildcard]
+          const actualCensor = typeof censor === 'function' ? censor(value, fullPath) : censor
+          setValue(current, afterDoubleWildcard, actualCensor)
+        }
+      }
+    }
+
+    // Recurse into every child so ** keeps matching at deeper levels
+    if (Array.isArray(current)) {
+      for (let i = 0; i < current.length; i++) {
+        traverseAll(current[i], [...currentPath, i.toString()])
+      }
+    } else {
+      for (const key in current) {
+        if (Object.prototype.hasOwnProperty.call(current, key)) {
+          traverseAll(current[key], [...currentPath, key])
+        }
+      }
+    }
+  }
+
+  traverseAll(startNode, startPath)
+}
+
 function buildPathStructure (pathsToClone) {
   if (pathsToClone.length === 0) {
     return null // No paths to redact
@@ -383,6 +468,11 @@ function selectiveClone (obj, pathStructure) {
 
     if (source instanceof Date) {
       return new Date(source.getTime())
+    }
+
+    // ** wildcard can match at any depth, so the entire subtree must be cloned
+    if (pathMap.has('**')) {
+      return deepClone(source)
     }
 
     if (Array.isArray(source)) {
